@@ -1,0 +1,18 @@
+{
+  "name": "weather-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack weather app with Express backend and React (Vite) frontend.",
+  "scripts": {
+    "backend:start": "cd Backend && node server.js",
+    "frontend:dev": "cd Frontend && npm run dev",
+    "frontend:build": "cd Frontend && npm run build",
+    "dev": "concurrently -k -n backend,frontend -c blue,magenta \"npm run backend:start\" \"npm run frontend:dev\""
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

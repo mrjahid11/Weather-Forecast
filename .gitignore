@@ -1,0 +1,35 @@
+# Node
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+Frontend/dist/
+Backend/public/
+**/dist/
+
+# Vite cache
+.vite/
+**/.vite/
+
+# Logs
+logs/
+*.log
+
+# Env/secrets
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+
+# Editor
+.vscode/
+.idea/
