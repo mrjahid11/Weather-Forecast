@@ -34,6 +34,12 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
+  const [airQuality, setAirQuality] = useState(null)
+  const [aqLoading, setAqLoading] = useState(false)
+  const [aqError, setAqError] = useState(null)
+  const [climate, setClimate] = useState(null)
+  const [climateLoading, setClimateLoading] = useState(false)
+  const [climateError, setClimateError] = useState(null)
   const [unit, setUnit] = useState('C') // 'C' or 'F'
   const [theme, setTheme] = useState('default') // default | sunny-day | night | rain | storm | cloudy | snow | fog
   const [themeMode, setThemeMode] = useState('auto') // auto | light | dark
@@ -157,6 +163,87 @@ export default function App() {
     document.body.classList.toggle('reduce-motion', !!reduce)
     document.body.classList.toggle('motion-calm', !!reduce)
   }, [data, themeMode, motionPref])
+
+  // Fetch air quality when we have coordinates from the forecast response
+  useEffect(() => {
+    async function fetchAQ() {
+      setAqError(null)
+      setAirQuality(null)
+      if (!data || !data.lat || !data.lon) return
+      setAqLoading(true)
+      try {
+        const resp = await fetch(`/api/air-quality?lat=${encodeURIComponent(data.lat)}&lon=${encodeURIComponent(data.lon)}`)
+        if (!resp.ok) {
+          const e = await resp.json().catch(() => ({}))
+          throw new Error(e.error || `AQ request failed: ${resp.status}`)
+        }
+        const json = await resp.json()
+        setAirQuality(json)
+      } catch (err) {
+        setAqError(err.message)
+      } finally {
+        setAqLoading(false)
+      }
+    }
+    fetchAQ()
+  }, [data])
+
+  // Fetch climate trend when we have coordinates
+  useEffect(() => {
+    async function fetchClimate() {
+      setClimateError(null)
+      setClimate(null)
+      if (!data || !data.lat || !data.lon) return
+      setClimateLoading(true)
+      try {
+        const resp = await fetch(`/api/climate?lat=${encodeURIComponent(data.lat)}&lon=${encodeURIComponent(data.lon)}&years=30`)
+        if (!resp.ok) {
+          const e = await resp.json().catch(() => ({}))
+          throw new Error(e.error || `Climate request failed: ${resp.status}`)
+        }
+        const json = await resp.json()
+        setClimate(json)
+      } catch (err) {
+        setClimateError(err.message)
+      } finally {
+        setClimateLoading(false)
+      }
+    }
+    fetchClimate()
+  }, [data])
+
+  const climateChart = useMemo(() => {
+    if (!climate || !climate.annual) return null
+    const labels = climate.annual.map((r) => String(r.year))
+    const dataVals = climate.annual.map((r) => Number(r.mean.toFixed(3)))
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Annual mean °C',
+          data: dataVals,
+          borderColor: 'rgba(255, 159, 64, 0.9)',
+          backgroundColor: 'rgba(255, 159, 64, 0.12)',
+          tension: 0.2,
+          pointRadius: 2,
+        },
+      ],
+    }
+  }, [climate])
+
+  const climateChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      title: { display: false },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: {
+      x: { display: true, title: { display: false } },
+      y: { display: true, title: { display: true, text: '°C' } }
+    }
+  }), [])
 
   const chartData = useMemo(() => {
     if (!data || !data.forecast || !data.forecast.daily) return null
@@ -388,6 +475,25 @@ export default function App() {
             </div>
           )}
 
+          {/* Air quality block (fetched from /api/air-quality) */}
+          <div className="air-quality-block">
+            {aqLoading && <div className="aq-loading">Loading air quality...</div>}
+            {aqError && <div className="aq-error">AQ Error: {aqError}</div>}
+            {airQuality && airQuality.sample && (
+              <div className="aq">
+                <strong>Air Quality:</strong>{' '}
+                <span className="aq-badge">{airQuality.category?.label ?? 'Unknown'}</span>
+                <div className="aq-details">
+                  <div>PM2.5: {airQuality.sample.pm2_5 != null ? `${airQuality.sample.pm2_5.toFixed(1)} µg/m³` : '—'}</div>
+                  <div>PM10: {airQuality.sample.pm10 != null ? `${airQuality.sample.pm10.toFixed(1)} µg/m³` : '—'}</div>
+                  <div>O₃: {airQuality.sample.o3 != null ? `${airQuality.sample.o3.toFixed(1)} µg/m³` : '—'}</div>
+                  <div>NO₂: {airQuality.sample.no2 != null ? `${airQuality.sample.no2.toFixed(1)} µg/m³` : '—'}</div>
+                </div>
+                {airQuality.cached ? <em> (cached)</em> : null}
+              </div>
+            )}
+          </div>
+
           {chartData ? (
             <div className="chart-wrapper">
               <Line options={chartOptions} data={chartData} />
@@ -404,6 +510,36 @@ export default function App() {
               </div>
             ) : null
           )}
+
+            {/* Climate change summary */}
+            <div className="climate-block">
+              {climateLoading && <div className="climate-loading">Loading climate trend...</div>}
+              {climateError && <div className="climate-error">Climate Error: {climateError}</div>}
+              {climate && climate.trend && (
+                <div className="climate">
+                  <h3>Climate summary (past {climate.years} years)</h3>
+                  <div>Local trend: {climate.trend.per_decade >= 0 ? '+' : ''}{climate.trend.per_decade.toFixed(3)} °C/decade</div>
+                  {climate.baseline && climate.baseline.mean != null && climate.recent && climate.recent.mean != null && (
+                    <div>Recent anomaly (vs {climate.baseline.period}): {climate.recent.anomaly >= 0 ? '+' : ''}{climate.recent.anomaly.toFixed(2)} °C (last {climate.recent.years} yrs)</div>
+                  )}
+                  <details>
+                    <summary>Annual means (click to expand)</summary>
+                    <div className="climate-annual">
+                      {climate.annual && climate.annual.map((r) => (
+                        <div key={r.year}>{r.year}: {r.mean.toFixed(2)} °C</div>
+                      ))}
+                    </div>
+                  </details>
+
+                  {/* Small line chart for annual means */}
+                  <div className="climate-chart" style={{ height: 180, marginTop: 12 }}>
+                    {climateChart ? (
+                      <Line data={climateChart} options={climateChartOptions} />
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
         </div>
       )}
       </div>

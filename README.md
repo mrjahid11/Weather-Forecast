@@ -119,3 +119,29 @@ Notes
 APIs used:
 - Nominatim (OpenStreetMap): https://nominatim.openstreetmap.org/
 - Open-Meteo: https://open-meteo.com/
+ - Open-Meteo: https://open-meteo.com/
+ - Open-Meteo Air Quality API (used for /api/air-quality): https://air-quality-api.open-meteo.com/ — no API key required
+
+Air quality feature
+-------------------
+
+This project now includes an Air Quality endpoint on the backend and a small display in the frontend.
+
+- Backend: `GET /api/air-quality?lat=<latitude>&lon=<longitude>` — returns recent pollutant concentrations (PM2.5, PM10, O3, NO2, etc.) and a simple PM2.5-based category. The backend proxies to Open‑Meteo's Air Quality API and caches results for ~5 minutes.
+- Frontend: after a successful `/api/forecast` call the client will automatically request `/api/air-quality` for the forecast coordinates and show the AQ category and pollutant values under the current conditions.
+
+No API keys are required because Open‑Meteo's air-quality endpoint is public. If you want to use a different provider (for example one that requires an API key), add a backend proxy route and store the key in an environment variable.
+
+Climate change feature
+----------------------
+
+This project also includes a small climate-change summary endpoint and frontend display that uses the Open‑Meteo Climate API (high-resolution CMIP6 downscaled models).
+
+- Backend: `GET /api/climate?lat=<lat>&lon=<lon>&years=30` — fetches daily mean temperature from Open‑Meteo Climate API for the requested period (default 30 years), computes annual means, a linear trend (°C/decade), and a recent anomaly relative to a 1991–2020 baseline. Results are cached for 24 hours.
+- Frontend: after a successful `/api/forecast` call the client will automatically request `/api/climate` for the forecast coordinates and show a short textual summary (trend + recent anomaly) and an expandable list of annual means.
+
+Notes and caveats:
+- Data source: https://climate-api.open-meteo.com/ (CMIP6 downscaled climate models). The API may return model ensemble values and is intended for climate analysis rather than exact historical weather measurements.
+- Baseline: the backend uses 1991–2020 as the baseline period for anomaly calculations when available. If the baseline years are not covered by the requested time window, the baseline will be omitted.
+- Performance: climate model data queries can be large; the backend limits requested years to a reasonable range and caches responses for one day.
+- Attribution: when using CMIP6-derived data, please cite Open‑Meteo and the underlying CMIP6 data producers per their terms (see Open‑Meteo docs).
