@@ -16,11 +16,11 @@ Project structure (split):
 Quick start — production-style (one server):
 
 ```powershell
-cd "e:\Course\New folder\weather-app\Frontend"
+cd "e:\Course\weather-app\Frontend"
 npm install
 npm run build
 
-cd "e:\Course\New folder\weather-app\Backend"
+cd "e:\Course\weather-app\Backend"
 npm install
 npm start
 # Open http://localhost:4000
@@ -29,7 +29,7 @@ npm start
 Dev mode — run both with one command (hot reload):
 
 ```powershell
-cd "e:\Course\New folder\weather-app"
+cd "e:\Course\weather-app"
 # First time only: install deps in Backend and Frontend
 cd .\Backend; npm install; cd ..\Frontend; npm install; cd ..
 
@@ -46,7 +46,7 @@ Troubleshooting (Windows):
 Backend — run locally:
 
 ```powershell
-cd "e:\Course\New folder\weather-app\Backend"
+cd "e:\Course\weather-app\Backend"
 npm install
 npm start
 ```
@@ -54,7 +54,7 @@ npm start
 Frontend (dev server with hot reload):
 
 ```powershell
-cd "e:\Course\New folder\weather-app\Frontend"
+cd "e:\Course\weather-app\Frontend"
 npm install
 npm run dev
 # open http://localhost:5173 (API proxied to http://localhost:4000)
@@ -63,7 +63,7 @@ npm run dev
 Build frontend and serve via backend:
 
 ```powershell
-cd "e:\Course\New folder\weather-app\Frontend"
+cd "e:\Course\weather-app\Frontend"
 npm install
 npm run build
 # Then start backend as above and open http://localhost:4000
@@ -72,7 +72,7 @@ npm run build
 Docker (build + run):
 
 ```powershell
-cd "e:\Course\New folder\weather-app"
+cd "e:\Course\weather-app"
 docker compose build --progress=plain
 docker compose up -d
 # then open http://localhost:4000
@@ -106,7 +106,7 @@ Notes on dev server issues:
 Root npm scripts:
 
 ```powershell
-cd "e:\Course\New folder\weather-app"
+cd "e:\Course\weather-app"
 npm run backend:start   # starts Backend/server.js
 npm run frontend:dev    # starts Vite dev server
 npm run frontend:build  # builds to Backend/public
