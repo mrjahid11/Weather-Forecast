@@ -1,3 +1,32 @@
+# Weather Forecast — minimal full-stack example
+
+A small full-stack weather app: an Express backend that proxies public weather APIs and a Vite + React frontend. The project demonstrates fetching forecasts, air-quality data, and optional climate summaries using OpenStreetMap (Nominatim) and Open‑Meteo (no API keys required).
+
+Key points
+- Backend: `Backend/` — Express server exposing `/api/forecast`, `/api/air-quality`, and `/api/climate`.
+- Frontend: `Frontend/` — Vite + React app (dev server on port 5173). Production build is served from `Backend/public`.
+- No API keys required for the default public providers used.
+
+Requirements
+- Node.js 18+ (uses the built-in fetch API).
+
+
+APIs used
+- Nominatim (OpenStreetMap) — geocoding
+- Open‑Meteo — forecast, air-quality, and climate data (public, no API key by default)
+
+Notes
+- Use these public APIs responsibly (rate limits, caching, user-agent identification for Nominatim).
+- The repo is a small demo and not production hardened — add proper error handling, rate limiting, and secrets management for production.
+
+Where to look
+- Backend entry: `Backend/server.js`
+- Frontend source: `Frontend/src/` (React + Vite)
+
+License / Attribution
+- Data: OpenStreetMap / Open‑Meteo. See their sites for terms of use and attribution requirements.
+
+Thank you for trying the project — open an issue if you want features or help.
 # Weather App (Frontend + Backend)
 
 This is a minimal full-stack weather forecast example.
@@ -119,8 +148,7 @@ Notes
 APIs used:
 - Nominatim (OpenStreetMap): https://nominatim.openstreetmap.org/
 - Open-Meteo: https://open-meteo.com/
- - Open-Meteo: https://open-meteo.com/
- - Open-Meteo Air Quality API (used for /api/air-quality): https://air-quality-api.open-meteo.com/ — no API key required
+- Open-Meteo Air Quality API (used for /api/air-quality): https://air-quality-api.open-meteo.com/ — no API key required
 
 Air quality feature
 -------------------
@@ -145,3 +173,11 @@ Notes and caveats:
 - Baseline: the backend uses 1991–2020 as the baseline period for anomaly calculations when available. If the baseline years are not covered by the requested time window, the baseline will be omitted.
 - Performance: climate model data queries can be large; the backend limits requested years to a reasonable range and caches responses for one day.
 - Attribution: when using CMIP6-derived data, please cite Open‑Meteo and the underlying CMIP6 data producers per their terms (see Open‑Meteo docs).
+
+Marine forecast and minutely-15 notes
+-----------------------------------
+
+- Marine forecast: the backend can proxy marine forecasts (where available) for coastal and open-water conditions. When available, marine data provides sea state, wave height/direction, and wind at sea; the project may expose an endpoint like `/api/marine?lat=<lat>&lon=<lon>` (check `Backend/server.js` for exact route).
+- Availability: marine / minutely-15 data is only available natively for Central Europe and North America. Other regions fall back to interpolated hourly data.
+- Solar radiation: for 15-minute minutely variables, solar radiation values are averaged over the 15-minute interval. Use the `instant` radiation field if you need the instantaneous value at the indicated time.
+- Forecast Minutely 15: you can adjust the forecast time range for 15-minute weather variables using the query parameters `&forecast_minutely_15=` (forward/forecast range) and `&past_minutely_15=` (past/backfill range) where the backend/API supports them.

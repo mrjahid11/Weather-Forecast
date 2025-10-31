@@ -246,6 +246,152 @@ app.get('/api/climate', async (req, res) => {
   }
 })
 
+// API: /api/marine?lat=...&lon=...&forecast_minutely_15=96&past_minutely_15=0
+// Provides marine-related variables and a 15-minute resampled series when requested.
+app.get('/api/marine', async (req, res) => {
+  const lat = parseFloat(req.query.lat || req.query.latitude)
+  const lon = parseFloat(req.query.lon || req.query.longitude)
+  console.log('Incoming /api/marine request', { lat: req.query.lat, lon: req.query.lon, qs: req.query })
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return res.status(400).json({ error: 'Missing or invalid lat/lon' })
+
+  // Number of 15-min steps forward/back. Defaults: forecast 96 (24h), past 0
+  const forecastSteps = Math.max(0, parseInt(req.query.forecast_minutely_15 || '96', 10))
+  const pastSteps = Math.max(0, parseInt(req.query.past_minutely_15 || '0', 10))
+
+  const cacheKey = `marine:${lat}:${lon}:${forecastSteps}:${pastSteps}`
+  const cached = cache.get(cacheKey)
+  if (cached) return res.json({ ...cached, cached: true })
+
+  // Rough region checks for native minutely-15 availability (approx)
+  function inSupportedRegion(lat, lon) {
+    // North America bounding box (approx): lat 15..75, lon -170..-50
+    if (lat >= 15 && lat <= 75 && lon >= -170 && lon <= -50) return true
+    // Central Europe approx: lat 35..70, lon -10..40
+    if (lat >= 35 && lat <= 70 && lon >= -10 && lon <= 40) return true
+    return false
+  }
+
+  try {
+    // Request upstream hourly marine/sea variables via Open-Meteo's forecast API (common public endpoint)
+    // We'll ask for hourly wave height and wind variables. If minutely data is available from upstream, we'll use/aggregate it.
+  const hourlyParams = ['wave_height','windspeed_10m','winddirection_10m','shortwave_radiation','significant_wave_period','swell_height']
+    let apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&hourly=${hourlyParams.join(',')}&timezone=auto`;
+    let resp = await fetchWithTimeout(apiUrl, {}, 12000).catch((e) => { throw e })
+    // If upstream rejected the full list (400), retry with a smaller, safer set of hourly variables
+    if (!resp.ok) {
+      console.warn('Upstream returned', resp.status, 'for marine hourly params, retrying with safe set')
+      const safeParams = ['windspeed_10m','winddirection_10m','shortwave_radiation']
+      apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&hourly=${safeParams.join(',')}&timezone=auto`;
+      resp = await fetchWithTimeout(apiUrl, {}, 12000)
+      if (!resp.ok) throw new Error(`Upstream failed: ${resp.status}`)
+    }
+    const json = await resp.json()
+
+    // Prepare time series: prefer upstream minutely if present and we're in supported region
+    const hasMinutely = json.minutely && Object.keys(json.minutely).length > 0
+    const wantMinutely15 = (forecastSteps + pastSteps) > 0
+    let series15 = null
+
+    if (hasMinutely && inSupportedRegion(lat, lon)) {
+      // If upstream provided minute-level data, aggregate into 15-min bins
+      const minutely = json.minutely
+      // Build time -> values mapping for each variable we care about (e.g., shortwave_radiation)
+      const minTimes = minutely.time || []
+      const stepMs = 15 * 60 * 1000
+  series15 = { time: [], shortwave_radiation: [], wave_height: [], windspeed_10m: [], significant_wave_period: [], swell_height: [] }
+      // Determine central window: pastSteps back and forecastSteps forward from now
+      const now = Date.now()
+      const startTs = now - (pastSteps * stepMs)
+      const endTs = now + (forecastSteps * stepMs)
+
+      // Convert minutely times to timestamps and group into 15-min buckets
+      const buckets = {}
+      for (let i = 0; i < minTimes.length; i++) {
+        const t = new Date(minTimes[i]).getTime()
+        if (t < startTs || t > endTs) continue
+        const bucket = Math.floor(t / stepMs) * stepMs
+        if (!buckets[bucket]) buckets[bucket] = { sum: 0, count: 0 }
+        const val = (minutely.shortwave_radiation && minutely.shortwave_radiation[i] != null) ? Number(minutely.shortwave_radiation[i]) : 0
+        buckets[bucket].sum += val
+        buckets[bucket].count += 1
+      }
+      const keys = Object.keys(buckets).map(k => parseInt(k, 10)).sort((a,b) => a-b)
+      for (const k of keys) {
+        series15.time.push(new Date(k).toISOString())
+        const b = buckets[k]
+        series15.shortwave_radiation.push(b.count ? (b.sum / b.count) : null)
+      }
+    }
+
+    // If upstream minutely isn't available or we're outside supported regions, fall back to hourly -> interpolate to 15-min
+    if (!series15 && wantMinutely15) {
+      const hourly = json.hourly || {}
+      const times = hourly.time || []
+      const wh = hourly.wave_height || []
+      const ws = hourly.windspeed_10m || []
+      const sw = hourly.shortwave_radiation || []
+      const swp = hourly.significant_wave_period || []
+      const swell = hourly.swell_height || []
+      // Build arrays of {ts, val}
+      const points = times.map((t, i) => ({
+        ts: new Date(t).getTime(),
+        wave: wh[i] != null ? Number(wh[i]) : null,
+        wind: ws[i] != null ? Number(ws[i]) : null,
+        sw: sw[i] != null ? Number(sw[i]) : null,
+        period: swp[i] != null ? Number(swp[i]) : null,
+        swell: swell[i] != null ? Number(swell[i]) : null,
+      }))
+
+      // Interpolate function for a numeric series
+      function interp(ts) {
+        // find surrounding points
+        if (points.length === 0) return { wave: null, wind: null, sw: null }
+        if (ts <= points[0].ts) return { wave: points[0].wave, wind: points[0].wind, sw: points[0].sw }
+        if (ts >= points[points.length-1].ts) return { wave: points[points.length-1].wave, wind: points[points.length-1].wind, sw: points[points.length-1].sw }
+        // find i where points[i].ts <= ts <= points[i+1].ts
+        let i = 0
+        while (i < points.length - 1 && points[i+1].ts < ts) i++
+        const a = points[i]
+        const b = points[i+1]
+        if (!a || !b || a.ts === b.ts) return { wave: a.wave, wind: a.wind, sw: a.sw }
+        const frac = (ts - a.ts) / (b.ts - a.ts)
+        const mix = (aVal, bVal) => (aVal == null || bVal == null) ? (aVal != null ? aVal : bVal) : (aVal + (bVal - aVal) * frac)
+        return { wave: mix(a.wave, b.wave), wind: mix(a.wind, b.wind), sw: mix(a.sw, b.sw) }
+      }
+
+      const stepMs = 15 * 60 * 1000
+      const now = Date.now()
+      const startTs = now - (pastSteps * stepMs)
+      const endTs = now + (forecastSteps * stepMs)
+  series15 = { time: [], wave_height: [], windspeed_10m: [], shortwave_radiation: [], significant_wave_period: [], swell_height: [] }
+      for (let ts = startTs; ts <= endTs; ts += stepMs) {
+        const v = interp(ts)
+        series15.time.push(new Date(ts).toISOString())
+        series15.wave_height.push(v.wave)
+        series15.windspeed_10m.push(v.wind)
+        series15.shortwave_radiation.push(v.sw)
+        series15.significant_wave_period.push(v.period)
+        series15.swell_height.push(v.swell)
+      }
+    }
+
+    const payload = {
+      latitude: json.latitude || lat,
+      longitude: json.longitude || lon,
+      source: json,
+      series15
+    }
+
+    // Cache for short time
+    cache.set(cacheKey, payload, 60 * 5)
+    return res.json({ ...payload, cached: false })
+  } catch (err) {
+    console.error('Marine proxy error', err)
+    if (err.name === 'AbortError') return res.status(504).json({ error: 'Upstream timed out' })
+    return res.status(500).json({ error: 'Internal server error', details: err.message })
+  }
+})
+
 // Fallback to index.html for client-side routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

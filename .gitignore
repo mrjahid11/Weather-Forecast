@@ -19,6 +19,9 @@ Backend/public/
 logs/
 *.log
 
+# Local test artifacts
+/Backend/marine_cox.json
+
 # Env/secrets
 .env
 .env.*

@@ -232,6 +232,14 @@ animation:flash 8s ease-in-out infinite}
 .ambient-layer{position:fixed;inset:0;z-index:-1;pointer-events:none}
 .hidden{display:none}
 
+/* Marine panel styles */
+.marine-block{margin-top:16px;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid var(--border)}
+.marine-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.marine-controls input[type="number"]{width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--fg)}
+.marine-chart-wrapper{margin-top:12px}
+.marine-note{font-size:12px;margin-top:8px;color:var(--fg)}
+.marine-error{color:#b00020;margin-top:8px}
+
 /* Ground ripple layer */
 .ripples{position:fixed;left:0;right:0;bottom:0;height:28vh;z-index:-1;pointer-events:none}
 .ripples .ripple{position:absolute;bottom:2vh;left:var(--x,50%);width:120px;height:120px;border-radius:50%;background:

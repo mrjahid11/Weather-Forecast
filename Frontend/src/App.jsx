@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
+import MarinePanel from './MarinePanel'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,6 +13,8 @@ import {
 import { Line } from 'react-chartjs-2'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
+
+// Marine chart is implemented in the extracted MarinePanel component (Frontend/src/MarinePanel.jsx)
 
 // Small mapping from Open-Meteo weather codes to emoji/icons.
 function mapWeatherCodeToEmoji(code) {
@@ -40,11 +43,13 @@ export default function App() {
   const [climate, setClimate] = useState(null)
   const [climateLoading, setClimateLoading] = useState(false)
   const [climateError, setClimateError] = useState(null)
+  
   const [unit, setUnit] = useState('C') // 'C' or 'F'
   const [theme, setTheme] = useState('default') // default | sunny-day | night | rain | storm | cloudy | snow | fog
   const [themeMode, setThemeMode] = useState('auto') // auto | light | dark
   const [motionPref, setMotionPref] = useState('auto') // auto | calm
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [climateOpen, setClimateOpen] = useState(false)
 
   // Moon phase approximation + waxing/waning. Returns { kind: 'full'|'half'|'other', age: number (0-29), waxing: boolean }
   function getMoonPhaseDetails(dateStr) {
@@ -212,6 +217,8 @@ export default function App() {
     fetchClimate()
   }, [data])
 
+  
+
   const climateChart = useMemo(() => {
     if (!climate || !climate.annual) return null
     const labels = climate.annual.map((r) => String(r.year))
@@ -341,6 +348,8 @@ export default function App() {
           <div className="ambient-layer clouds" aria-hidden>
             <span></span><span></span><span></span><span></span>
           </div>
+
+          {/* Marine UI moved to Frontend/src/MarinePanel.jsx */}
         </>
       )
     }
@@ -511,35 +520,48 @@ export default function App() {
             ) : null
           )}
 
-            {/* Climate change summary */}
-            <div className="climate-block">
-              {climateLoading && <div className="climate-loading">Loading climate trend...</div>}
-              {climateError && <div className="climate-error">Climate Error: {climateError}</div>}
-              {climate && climate.trend && (
-                <div className="climate">
-                  <h3>Climate summary (past {climate.years} years)</h3>
-                  <div>Local trend: {climate.trend.per_decade >= 0 ? '+' : ''}{climate.trend.per_decade.toFixed(3)} °C/decade</div>
-                  {climate.baseline && climate.baseline.mean != null && climate.recent && climate.recent.mean != null && (
-                    <div>Recent anomaly (vs {climate.baseline.period}): {climate.recent.anomaly >= 0 ? '+' : ''}{climate.recent.anomaly.toFixed(2)} °C (last {climate.recent.years} yrs)</div>
-                  )}
-                  <details>
-                    <summary>Annual means (click to expand)</summary>
-                    <div className="climate-annual">
-                      {climate.annual && climate.annual.map((r) => (
-                        <div key={r.year}>{r.year}: {r.mean.toFixed(2)} °C</div>
-                      ))}
-                    </div>
-                  </details>
-
-                  {/* Small line chart for annual means */}
-                  <div className="climate-chart" style={{ height: 180, marginTop: 12 }}>
-                    {climateChart ? (
-                      <Line data={climateChart} options={climateChartOptions} />
-                    ) : null}
-                  </div>
-                </div>
-              )}
+          {/* Marine panel (separate component) */}
+          {data && (data.lat != null && data.lon != null) && (
+            <div style={{ marginTop: 12 }}>
+              <MarinePanel lat={data.lat} lon={data.lon} />
             </div>
+          )}
+
+            {/* Climate change summary (toggleable) */}
+            <div style={{ marginTop: 12 }}>
+              <button type="button" className="link-btn" onClick={() => setClimateOpen((v) => !v)}>{climateOpen ? 'Hide Climate' : 'Show Climate summary'}</button>
+            </div>
+
+            {climateOpen && (
+              <div className="climate-block" style={{ marginTop: 8 }}>
+                {climateLoading && <div className="climate-loading">Loading climate trend...</div>}
+                {climateError && <div className="climate-error">Climate Error: {climateError}</div>}
+                {climate && climate.trend && (
+                  <div className="climate">
+                    <h3>Climate summary (past {climate.years} years)</h3>
+                    <div>Local trend: {climate.trend.per_decade >= 0 ? '+' : ''}{climate.trend.per_decade.toFixed(3)} °C/decade</div>
+                    {climate.baseline && climate.baseline.mean != null && climate.recent && climate.recent.mean != null && (
+                      <div>Recent anomaly (vs {climate.baseline.period}): {climate.recent.anomaly >= 0 ? '+' : ''}{climate.recent.anomaly.toFixed(2)} °C (last {climate.recent.years} yrs)</div>
+                    )}
+                    <details>
+                      <summary>Annual means (click to expand)</summary>
+                      <div className="climate-annual">
+                        {climate.annual && climate.annual.map((r) => (
+                          <div key={r.year}>{r.year}: {r.mean.toFixed(2)} °C</div>
+                        ))}
+                      </div>
+                    </details>
+
+                    {/* Small line chart for annual means */}
+                    <div className="climate-chart" style={{ height: 180, marginTop: 12 }}>
+                      {climateChart ? (
+                        <Line data={climateChart} options={climateChartOptions} />
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
         </div>
       )}
       </div>

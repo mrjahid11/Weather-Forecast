@@ -7,6 +7,7 @@
     "backend:start": "cd Backend && node server.js",
     "frontend:dev": "cd Frontend && npm run dev",
     "frontend:build": "cd Frontend && npm run build",
+    "cleanup:local": "node scripts/cleanup-local.js",
     "dev": "concurrently -k -n backend,frontend -c blue,magenta \"npm run backend:start\" \"npm run frontend:dev\""
   },
   "engines": {
