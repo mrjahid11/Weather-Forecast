@@ -9,6 +9,11 @@ const cache = new NodeCache({ stdTTL: 60 * 10, checkperiod: 120 }); // 10 minute
 const app = express();
 app.use(express.json());
 
+// Fast-fail timeout for user-facing forecast requests (ms). If upstream
+// processing takes longer than this, we return a generated mock so the UI
+// remains responsive. Can be overridden via FAST_FAIL_MS env var.
+const FAST_FAIL_MS = parseInt(process.env.FAST_FAIL_MS || '5000', 10);
+
 // Generate a lightweight mock forecast (used when upstream is unavailable).
 function generateMockForecast(lat = 0, lon = 0) {
   const now = Date.now()
@@ -122,59 +127,92 @@ app.get('/api/forecast', async (req, res) => {
     return res.json({ ...payload, cached: false, mock: true })
   }
 
-  try {
-    // Nominatim geocoding
-  const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
-  // Nominatim is a public service with rate limits; use retries with a slightly longer timeout
-  const nomResp = await fetchWithRetries(nominatimUrl, { headers: { 'User-Agent': 'weather-app-example' } }, 10000, 2).catch((e) => { throw e });
-  if (!nomResp.ok) throw new Error(`Nominatim failed: ${nomResp.status}`);
-  const places = await nomResp.json();
-    if (!places || places.length === 0) return res.status(404).json({ error: 'Location not found' });
-    const { lat, lon, display_name } = places[0];
-
-  // Open-Meteo forecast: include hourly variables so frontend can render a 24-hour view
-  // Request hourly temperature, precipitation, weathercode and windspeed in addition to daily summaries
-  const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,precipitation,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
-    // Use retries and a slightly longer timeout for the forecast request to reduce transient 504s
-    let metData = null
+  // We'll perform the normal upstream work in an async function and race it
+  // against a fast-fail timeout. If the upstream work completes quickly, we
+  // return that result. If it doesn't, we immediately return a generated
+  // mock so the UI stays responsive.
+  async function doForecastWork() {
     try {
-      const metResp = await fetchWithRetries(meteoUrl, {}, 15000, 2)
-      if (!metResp.ok) throw new Error(`Open-Meteo failed: ${metResp.status}`)
-      metData = await metResp.json()
-    } catch (err) {
-      console.warn('Open-Meteo forecast failed, attempting lightweight fallback:', err && err.message)
-      // Fallback: try a lightweight request asking only for current weather (smaller, faster)
+      // Nominatim geocoding
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
+      // Nominatim is a public service with rate limits; use retries with a slightly longer timeout
+      const nomResp = await fetchWithRetries(nominatimUrl, { headers: { 'User-Agent': 'weather-app-example' } }, 8000, 2);
+      if (!nomResp.ok) throw new Error(`Nominatim failed: ${nomResp.status}`);
+      const places = await nomResp.json();
+      if (!places || places.length === 0) return { error: { status: 404, body: { error: 'Location not found' } } };
+      const { lat, lon, display_name } = places[0];
+
+      // Open-Meteo forecast: include hourly variables so frontend can render a 24-hour view
+      const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,precipitation,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
+      // Use retries for forecast but with conservative per-request timeouts
+      let metData = null;
       try {
-        const lightweightUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`;
-        const lwResp = await fetchWithRetries(lightweightUrl, {}, 8000, 1)
-        if (lwResp.ok) {
-          const lw = await lwResp.json()
-          // Create a minimal shape with current_weather so frontend can at least show current
-          metData = { latitude: lw.latitude, longitude: lw.longitude, current_weather: lw.current_weather }
-        } else {
-          throw new Error(`Lightweight Open-Meteo failed: ${lwResp.status}`)
+        const metResp = await fetchWithRetries(meteoUrl, {}, 8000, 1);
+        if (!metResp.ok) throw new Error(`Open-Meteo failed: ${metResp.status}`);
+        metData = await metResp.json();
+      } catch (err) {
+        console.warn('Open-Meteo forecast failed, attempting lightweight fallback:', err && err.message);
+        // Fallback: try a lightweight request asking only for current weather (smaller, faster)
+        try {
+          const lightweightUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`;
+          const lwResp = await fetchWithRetries(lightweightUrl, {}, 4000, 0);
+          if (lwResp.ok) {
+            const lw = await lwResp.json();
+            metData = { latitude: lw.latitude, longitude: lw.longitude, current_weather: lw.current_weather };
+          } else {
+            throw new Error(`Lightweight Open-Meteo failed: ${lwResp.status}`);
+          }
+        } catch (err2) {
+          // If fallback also fails, return an instruction to generate mock
+          console.warn('Both full and lightweight Open-Meteo requests failed:', err2 && err2.message);
+          return { mock: true, lat, lon, display_name: display_name || city };
         }
-      } catch (err2) {
-        // If fallback also fails, generate a local mock forecast so the app remains usable
-        console.warn('Both full and lightweight Open-Meteo requests failed; returning generated mock forecast:', err2 && err2.message)
-        metData = generateMockForecast(lat, lon)
-        // Do not cache generated mock forecasts — keep them ephemeral so they change on refresh
-        const payload = { location: display_name || city, lat, lon, forecast: metData }
-        return res.json({ ...payload, cached: false, mock: true })
       }
+
+      const payload = { location: display_name, lat, lon, forecast: metData };
+      // Store successful upstream payload in cache
+      cache.set(cacheKey, payload);
+      return { payload };
+    } catch (err) {
+      console.error('Forecast proxy error', err && err.message);
+      if (err && err.name === 'AbortError') return { error: { status: 504, body: { error: 'Upstream timed out' } } };
+      return { error: { status: 500, body: { error: 'Internal server error', details: err && err.message } } };
+    }
+  }
+
+  // Race the upstream work against a fast-fail timer
+  try {
+    const fastFail = new Promise((resolve) => setTimeout(() => resolve({ fastFail: true }), FAST_FAIL_MS));
+    const result = await Promise.race([doForecastWork(), fastFail]);
+
+    if (result && result.fastFail) {
+      // Upstream work is taking too long — respond quickly with a generated mock
+      const mockData = generateMockForecast(0, 0);
+      const payload = { location: city, lat: 0, lon: 0, forecast: mockData };
+      return res.json({ ...payload, cached: false, mock: true });
     }
 
-    const payload = { location: display_name, lat, lon, forecast: metData };
-    // Store in cache
-    cache.set(cacheKey, payload);
+    if (result && result.error) {
+      return res.status(result.error.status).json(result.error.body);
+    }
 
-    return res.json({ ...payload, cached: false });
+    if (result && result.mock) {
+      // Upstream attempted but failed — generate a mock based on the (possibly available) coords
+      const mockData = generateMockForecast(result.lat || 0, result.lon || 0);
+      const payload = { location: result.display_name || city, lat: result.lat || 0, lon: result.lon || 0, forecast: mockData };
+      return res.json({ ...payload, cached: false, mock: true });
+    }
+
+    if (result && result.payload) {
+      return res.json({ ...result.payload, cached: false });
+    }
+
+    // Fallback safety: return a quick mock if nothing matched
+    const safetyMock = generateMockForecast(0, 0);
+    return res.json({ location: city, lat: 0, lon: 0, forecast: safetyMock, cached: false, mock: true });
   } catch (err) {
-    console.error(err);
-    if (err.name === 'AbortError') {
-      return res.status(504).json({ error: 'Upstream timed out' });
-    }
-    return res.status(500).json({ error: 'Internal server error', details: err.message });
+    console.error('Forecast handler failure', err && err.message);
+    return res.status(500).json({ error: 'Internal server error', details: err && err.message });
   }
 });
 

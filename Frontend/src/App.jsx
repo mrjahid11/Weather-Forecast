@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import MarinePanel from './MarinePanel'
 import HourlyPanel from './HourlyPanel'
+import AirQualityPanel from './AirQualityPanel'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -185,13 +186,34 @@ export default function App() {
 
   // Fetch air quality when we have coordinates from the forecast response
   useEffect(() => {
+    // Local mock generators used when backend returns a mock forecast (offline/dev)
+    function makeMockAQ() {
+      const sample = {
+        time: new Date().toISOString(),
+        pm2_5: Number((5 + Math.random() * 30).toFixed(1)),
+        pm10: Number((8 + Math.random() * 40).toFixed(1)),
+        o3: Number((10 + Math.random() * 30).toFixed(1)),
+        no2: Number((2 + Math.random() * 20).toFixed(1))
+      }
+      const category = sample.pm2_5 <= 12 ? { idx: 1, label: 'Good' } : (sample.pm2_5 <= 35 ? { idx: 2, label: 'Moderate' } : { idx: 3, label: 'Unhealthy for sensitive groups' })
+      return { lat: data?.lat ?? data?.forecast?.latitude, lon: data?.lon ?? data?.forecast?.longitude, sample, category, source: 'mock' }
+    }
     async function fetchAQ() {
       setAqError(null)
       setAirQuality(null)
-      if (!data || !data.lat || !data.lon) return
+      if (!data) return
+      if (data.mock) {
+        // Provide a lightweight local mock for air quality so the UI stays populated when upstream is down
+        setAirQuality(makeMockAQ())
+        return
+      }
+      // Accept top-level lat/lon or fall back to forecast.latitude/longitude (mock responses may use 0)
+      const latVal = (data.lat != null && data.lat !== '') ? Number(data.lat) : (data.forecast && data.forecast.latitude != null ? Number(data.forecast.latitude) : NaN)
+      const lonVal = (data.lon != null && data.lon !== '') ? Number(data.lon) : (data.forecast && data.forecast.longitude != null ? Number(data.forecast.longitude) : NaN)
+  if (!Number.isFinite(latVal) || !Number.isFinite(lonVal)) return
       setAqLoading(true)
       try {
-        const resp = await fetch(`/api/air-quality?lat=${encodeURIComponent(data.lat)}&lon=${encodeURIComponent(data.lon)}`)
+        const resp = await fetch(`/api/air-quality?lat=${encodeURIComponent(latVal)}&lon=${encodeURIComponent(lonVal)}`)
         if (!resp.ok) {
           const e = await resp.json().catch(() => ({}))
           throw new Error(e.error || `AQ request failed: ${resp.status}`)
@@ -209,13 +231,46 @@ export default function App() {
 
   // Fetch climate trend when we have coordinates
   useEffect(() => {
+    function makeMockClimate() {
+      const years = 30
+      const nowYear = new Date().getUTCFullYear()
+      const annual = Array.from({ length: years }).map((_, i) => {
+        const year = nowYear - (years - 1) + i
+        const mean = Number((10 + Math.random() * 2 + (i * 0.02)).toFixed(3))
+        return { year, mean }
+      })
+      const yVals = annual.map(r => r.mean)
+      const yMean = yVals.reduce((a, b) => a + b, 0) / yVals.length
+      const slopePerYear = 0.02
+      const recentSlice = yVals.slice(-5)
+      const recentMean = recentSlice.reduce((a, b) => a + b, 0) / recentSlice.length
+
+      return {
+        latitude: data?.lat ?? data?.forecast?.latitude,
+        longitude: data?.lon ?? data?.forecast?.longitude,
+        start_date: `${nowYear - years + 1}-01-01`,
+        end_date: `${nowYear}-01-01`,
+        years,
+        annual,
+        trend: { per_year: slopePerYear, per_decade: slopePerYear * 10 },
+        baseline: { period: '1991-2020', mean: yMean - 0.4 },
+        recent: { years: 5, mean: recentMean, anomaly: recentMean - (yMean - 0.4) }
+      }
+    }
     async function fetchClimate() {
       setClimateError(null)
       setClimate(null)
-      if (!data || !data.lat || !data.lon) return
+      if (!data) return
+      if (data.mock) {
+        setClimate(makeMockClimate())
+        return
+      }
+      const latVal = (data.lat != null && data.lat !== '') ? Number(data.lat) : (data.forecast && data.forecast.latitude != null ? Number(data.forecast.latitude) : NaN)
+      const lonVal = (data.lon != null && data.lon !== '') ? Number(data.lon) : (data.forecast && data.forecast.longitude != null ? Number(data.forecast.longitude) : NaN)
+  if (!Number.isFinite(latVal) || !Number.isFinite(lonVal)) return
       setClimateLoading(true)
       try {
-        const resp = await fetch(`/api/climate?lat=${encodeURIComponent(data.lat)}&lon=${encodeURIComponent(data.lon)}&years=30`)
+        const resp = await fetch(`/api/climate?lat=${encodeURIComponent(latVal)}&lon=${encodeURIComponent(lonVal)}&years=30`)
         if (!resp.ok) {
           const e = await resp.json().catch(() => ({}))
           throw new Error(e.error || `Climate request failed: ${resp.status}`)
@@ -492,8 +547,9 @@ export default function App() {
         <div className="result">
           <h2>{data.location}</h2>
 
-          {data.forecast && data.forecast.current_weather && (
-            <div className="current-tile">
+          <div className="top-row">
+            {data.forecast && data.forecast.current_weather && (
+              <div className="current-tile">
               <div className="cw-left">
                 <div className="cw-icon" aria-hidden>{mapWeatherCodeToEmoji(data.forecast.current_weather.weathercode)}</div>
                 <div className="cw-label">{mapWeatherCodeToLabel(data.forecast.current_weather.weathercode)}</div>
@@ -507,26 +563,11 @@ export default function App() {
                 <div>Time: <small>{new Date(data.forecast.current_weather.time).toLocaleString()}</small></div>
                 {data.cached ? <div className="cached-badge">cached</div> : null}
               </div>
-            </div>
-          )}
-
-          {/* Air quality block (fetched from /api/air-quality) */}
-          <div className="air-quality-block">
-            {aqLoading && <div className="aq-loading">Loading air quality...</div>}
-            {aqError && <div className="aq-error">AQ Error: {aqError}</div>}
-            {airQuality && airQuality.sample && (
-              <div className="aq">
-                <strong>Air Quality:</strong>{' '}
-                <span className="aq-badge">{airQuality.category?.label ?? 'Unknown'}</span>
-                <div className="aq-details">
-                  <div>PM2.5: {airQuality.sample.pm2_5 != null ? `${airQuality.sample.pm2_5.toFixed(1)} µg/m³` : '—'}</div>
-                  <div>PM10: {airQuality.sample.pm10 != null ? `${airQuality.sample.pm10.toFixed(1)} µg/m³` : '—'}</div>
-                  <div>O₃: {airQuality.sample.o3 != null ? `${airQuality.sample.o3.toFixed(1)} µg/m³` : '—'}</div>
-                  <div>NO₂: {airQuality.sample.no2 != null ? `${airQuality.sample.no2.toFixed(1)} µg/m³` : '—'}</div>
-                </div>
-                {airQuality.cached ? <em> (cached)</em> : null}
               </div>
             )}
+
+            {/* Air quality panel placed to the right of current tile on wide screens */}
+            <AirQualityPanel airQuality={airQuality} loading={aqLoading} error={aqError} />
           </div>
 
           {/* 24-hour hourly forecast (present -> +24h) inserted before the 7-day chart */}

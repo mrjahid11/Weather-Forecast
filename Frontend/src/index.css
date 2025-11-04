@@ -260,10 +260,29 @@ animation:flash 8s ease-in-out infinite}
 .cw-sub{font-size:13px;color:var(--fg);opacity:0.85}
 .cw-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:140px}
 .cached-badge{font-size:12px;color:#fff;background:#888;padding:4px 8px;border-radius:12px}
+.top-row{display:flex;gap:12px;align-items:flex-start}
+.top-row > .current-tile{flex:1}
+
+/* Air quality tile styles */
+.aq-tile{width:220px;min-width:200px;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.aq-header{display:flex;align-items:center;justify-content:space-between}
+.aq-title{font-weight:700}
+.aq-badge{padding:6px 10px;border-radius:999px;color:#fff;font-weight:700;font-size:12px}
+.aq-main{display:flex;gap:12px;align-items:center}
+.aq-left{display:flex;flex-direction:column;align-items:center}
+.aq-large{font-size:28px;font-weight:800}
+.aq-sub{font-size:12px;color:var(--fg);opacity:0.85}
+.aq-right{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.aq-row{color:var(--fg);opacity:0.9}
+.aq-advice{font-size:12px;color:var(--fg);opacity:0.85;margin-top:6px}
+.aq-meta{font-size:11px;color:var(--fg);opacity:0.65}
+.aq-loading,.aq-error,.aq-empty{font-size:13px;color:var(--fg);opacity:0.9}
 
 @media (max-width:520px){
 	.current-tile{flex-direction:row;gap:8px}
 	.cw-right{align-items:flex-start}
+	.top-row{flex-direction:column}
+	.aq-tile{width:100%;min-width:unset}
 }
 .mock-badge{display:none}
 

@@ -11,9 +11,10 @@ export default function MarinePanel({ lat, lon }) {
   const [pastMin15, setPastMin15] = useState(0)
 
   async function fetchMarine() {
-    setMarineError(null)
-    setMarineData(null)
-    if (!lat || !lon) return setMarineError('No coordinates available')
+  setMarineError(null)
+  setMarineData(null)
+  // allow 0 coordinates (valid at equator/prime meridian). Only bail if null/undefined
+  if (lat == null || lon == null) return setMarineError('No coordinates available')
     setMarineLoading(true)
     try {
       const resp = await fetch(`/api/marine?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&forecast_minutely_15=${encodeURIComponent(forecastMin15)}&past_minutely_15=${encodeURIComponent(pastMin15)}`)
