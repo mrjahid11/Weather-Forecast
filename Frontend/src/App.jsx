@@ -572,7 +572,7 @@ export default function App() {
 
           {/* 24-hour hourly forecast (present -> +24h) inserted before the 7-day chart */}
           {data && data.forecast && data.forecast.hourly && (
-            <HourlyPanel forecast={data.forecast} unit={unit} />
+            <HourlyPanel forecast={data.forecast} unit={unit} isDay={(data.forecast && data.forecast.current_weather && data.forecast.current_weather.is_day === 1) || true} />
           )}
 
           {chartData ? (

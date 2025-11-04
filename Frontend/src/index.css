@@ -202,7 +202,7 @@ animation:flash 8s ease-in-out infinite}
 	100%{transform:translate3d(var(--dx,-240vw),var(--dy,160vh),0) rotate(var(--rot,-45deg));opacity:0}}
 .container{max-width:720px;width:92%;margin:24px;padding:24px;background:var(--panel);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
 	border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.18)}
-.theme-sunny-day.mode-light .container{background:rgba(255,255,255,0.96);box-shadow:0 14px 44px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)}
+.theme-sunny-day.mode-light .container{background:rgba(255,255,255,0.985);box-shadow:0 8px 20px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.02)}
 .mode-dark .container{box-shadow:0 14px 44px rgba(0,0,0,0.45)}
 .header-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .icon-btn{background:transparent;border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px 8px;cursor:pointer}
@@ -306,8 +306,21 @@ animation:flash 8s ease-in-out infinite}
 .hourly-panel{margin-top:12px;padding:10px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid var(--border)}
 .hourly-list{display:flex;gap:10px;overflow-x:auto;padding:8px 4px}
 .hour-slot{min-width:84px;flex:0 0 auto;background:rgba(255,255,255,0.02);border-radius:8px;padding:8px;text-align:center;border:1px solid rgba(0,0,0,0.04)}
+.hour-slot{position:relative;overflow:hidden}
+/* Improved hour box for light mode: subtle card with soft shadow and accent ring */
+.mode-light .hour-slot, .mode-light .hour-slot.day{background:linear-gradient(180deg, #ffffff, #fcfeff);border:1px solid rgba(16,24,40,0.03);box-shadow:0 6px 12px rgba(16,24,40,0.02)}
+.mode-light .hour-slot.night{background:linear-gradient(180deg,#fbfdff,#f6f9fc);border:1px solid rgba(16,24,40,0.025);box-shadow:0 6px 12px rgba(16,24,40,0.012)}
+.hour-deco{position:absolute;left:8px;top:8px;pointer-events:none}
+.slot-sun,.slot-moon{display:inline-block;font-size:14px;line-height:1;opacity:0;transform:translateY(-2px);transition:all .28s ease}
+.slot-sun.visible,.slot-moon.visible{opacity:1;transform:translateY(0)}
+.hour-slot .hour-icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;margin:6px auto 0;border-radius:12px}
+.hour-slot .icon-neon{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:46px;height:46px;border-radius:12px;pointer-events:none;z-index:1}
+.hour-slot .icon-neon::after{content:"";position:absolute;inset:0;border-radius:12px;opacity:0.9}
+.hour-slot .icon-fore{position:relative;z-index:2;font-size:20px}
+.mode-light .hour-slot .icon-neon.neon-sun::after{background:linear-gradient(90deg, rgba(255,235,59,0.18), rgba(255,138,101,0.08));box-shadow:0 6px 18px rgba(255,167,38,0.08), 0 0 22px rgba(255,214,115,0.04)}
+.mode-light .hour-slot .icon-neon.neon-moon::after{background:linear-gradient(90deg, rgba(144,202,249,0.1), rgba(100,181,246,0.05));box-shadow:0 6px 18px rgba(84,153,255,0.05), 0 0 18px rgba(144,202,249,0.03)}
+.mode-light .hour-slot .icon-neon{background:transparent;border:1px solid rgba(255,255,255,0.02)}
 .hour-slot .hour-time{font-size:12px;color:var(--fg);opacity:0.9}
-.hour-slot .hour-icon{font-size:20px;margin-top:6px}
 .hour-slot .hour-temp{font-weight:600;margin-top:6px}
 .hour-slot .hour-prec{font-size:12px;color:var(--fg);opacity:0.8;margin-top:4px}
 .hour-slot .hour-wind{font-size:11px;color:var(--fg);opacity:0.7;margin-top:4px}

@@ -1,5 +1,8 @@
 import React from 'react'
 
+// Small inline SVG icons (sun/moon) with a soft glow
+// We replaced sun/moon background SVGs with a neon-styled condition badge (see CSS)
+
 // A small, present-to-24-hours horizontal list showing time, icon, temp and precipitation
 export default function HourlyPanel({ forecast, unit = 'C' }) {
   if (!forecast || !forecast.hourly || !forecast.hourly.time) return null
@@ -58,15 +61,27 @@ export default function HourlyPanel({ forecast, unit = 'C' }) {
     <div className="hourly-panel">
       <h3 style={{ margin: '6px 0' }}>Next 24 hours</h3>
       <div className="hourly-list" role="list">
-        {slice.map((s, i) => (
-          <div key={s.time} className="hour-slot" role="listitem" title={s.time}>
-            <div className="hour-time">{i === 0 ? 'Now' : fmtHour(s.time)}</div>
-            <div className="hour-icon">{mapWeatherCodeToEmoji(s.code)}</div>
-            <div className="hour-temp">{fmtTemp(s.temp)}</div>
-            <div className="hour-prec">{s.prec != null && s.prec > 0 ? `${s.prec} mm` : '—'}</div>
-            <div className="hour-wind">{s.wind != null ? `${Math.round(s.wind)} km/h` : '—'}</div>
-          </div>
-        ))}
+          {slice.map((s, i) => {
+          // determine day/night per slot using local hour (rough heuristic)
+          let slotIsDay = true
+          try {
+            const d = new Date(s.time)
+            const h = d.getHours()
+            slotIsDay = h >= 6 && h < 18
+          } catch {}
+            return (
+            <div key={s.time} className={`hour-slot ${slotIsDay ? 'day' : 'night'}`} role="listitem" title={s.time}>
+              <div className="hour-time">{i === 0 ? 'Now' : fmtHour(s.time)}</div>
+              <div className="hour-icon">
+                <span className={`icon-neon ${slotIsDay ? 'neon-sun' : 'neon-moon'}`} aria-hidden />
+                <span className="icon-fore" aria-hidden>{mapWeatherCodeToEmoji(s.code)}</span>
+              </div>
+              <div className="hour-temp">{fmtTemp(s.temp)}</div>
+              <div className="hour-prec">{s.prec != null && s.prec > 0 ? `${s.prec} mm` : '—'}</div>
+              <div className="hour-wind">{s.wind != null ? `${Math.round(s.wind)} km/h` : '—'}</div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
