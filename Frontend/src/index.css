@@ -5,7 +5,7 @@ body{font-family:Arial, Helvetica, sans-serif;color:var(--fg);background:var(--b
 
 /* Animated backgrounds by theme */
 /* Base decorative svg backdrop for subtle texture */
-body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(180deg, rgba(25,118,210,0.18), rgba(255,255,255,0.18)), url('/images/weather-bg.svg');background-size:cover;background-position:center;background-attachment:fixed;z-index:-3;opacity:0.6;}
+body::before{content:"";position:fixed;inset:0;background-image:linear-gradient(180deg, rgba(25,118,210,0.18), rgba(255,255,255,0.18)), url('/images/weatherBg.jpg');background-size:cover;background-position:center;background-attachment:fixed;z-index:-3;opacity:0.6;}
 
 /* Sunny Day: gentle gradient and drifting clouds */
 .theme-sunny-day::after{content:"";position:fixed;inset:-20% -20% 0 -20%;z-index:-2;background:
@@ -228,6 +228,49 @@ animation:flash 8s ease-in-out infinite}
 .chart-wrapper{max-width:100%;height:320px;margin-top:12px}
 .chart-wrapper canvas{max-height:320px}
 
+/* Forecast tile: give 7-day chart its own card-like tile */
+.forecast-tile{margin-top:12px;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid var(--border)}
+.forecast-tile .tile-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.forecast-tile .tile-header h3{margin:0;font-size:16px}
+.forecast-tile .tile-header .tile-meta{font-size:12px;color:var(--fg);opacity:0.8}
+.forecast-tile .chart-wrapper{height:300px;margin-top:6px}
+.forecast-tile .chart-wrapper canvas{max-height:300px}
+
+@media (max-width:480px){
+	.forecast-tile .tile-header h3{font-size:14px}
+	.forecast-tile .chart-wrapper{height:240px}
+}
+
+/* Climate tile styles */
+.climate-tile{margin-top:12px;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid var(--border)}
+.climate-tile .tile-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.climate-tile .tile-header h3{margin:0;font-size:15px}
+.climate-tile .tile-meta{font-size:12px;color:var(--fg);opacity:0.8}
+.climate-tile .climate-block{margin-top:6px}
+.climate-chart{height:180px}
+.climate-annual{margin-top:8px;max-height:160px;overflow:auto;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.03);background:rgba(0,0,0,0.01)}
+
+/* Current weather tile */
+.current-tile{display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid var(--border);margin-top:10px}
+.cw-left{display:flex;flex-direction:column;align-items:center;min-width:88px}
+.cw-icon{font-size:38px}
+.cw-label{font-size:12px;margin-top:6px;color:var(--fg);opacity:0.9}
+.cw-main{flex:1}
+.cw-temp{font-size:34px;font-weight:700}
+.cw-sub{font-size:13px;color:var(--fg);opacity:0.85}
+.cw-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:140px}
+.cached-badge{font-size:12px;color:#fff;background:#888;padding:4px 8px;border-radius:12px}
+
+@media (max-width:520px){
+	.current-tile{flex-direction:row;gap:8px}
+	.cw-right{align-items:flex-start}
+}
+.mock-badge{display:none}
+
+/* Dev debug panel (non-intrusive) */
+.dev-debug-panel{position:fixed;left:12px;bottom:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:8px;font-size:12px;z-index:9999;box-shadow:0 6px 18px rgba(0,0,0,0.3)}
+.dev-debug-panel[aria-hidden="true"]{display:none}
+
 /* Theme-driven ambient layers in markup (optional elements) */
 .ambient-layer{position:fixed;inset:0;z-index:-1;pointer-events:none}
 .hidden{display:none}
@@ -239,6 +282,20 @@ animation:flash 8s ease-in-out infinite}
 .marine-chart-wrapper{margin-top:12px}
 .marine-note{font-size:12px;margin-top:8px;color:var(--fg)}
 .marine-error{color:#b00020;margin-top:8px}
+
+/* Hourly 24-hour forecast styles */
+.hourly-panel{margin-top:12px;padding:10px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid var(--border)}
+.hourly-list{display:flex;gap:10px;overflow-x:auto;padding:8px 4px}
+.hour-slot{min-width:84px;flex:0 0 auto;background:rgba(255,255,255,0.02);border-radius:8px;padding:8px;text-align:center;border:1px solid rgba(0,0,0,0.04)}
+.hour-slot .hour-time{font-size:12px;color:var(--fg);opacity:0.9}
+.hour-slot .hour-icon{font-size:20px;margin-top:6px}
+.hour-slot .hour-temp{font-weight:600;margin-top:6px}
+.hour-slot .hour-prec{font-size:12px;color:var(--fg);opacity:0.8;margin-top:4px}
+.hour-slot .hour-wind{font-size:11px;color:var(--fg);opacity:0.7;margin-top:4px}
+
+/* Make horizontal scroll nicer */
+.hourly-list::-webkit-scrollbar{height:8px}
+.hourly-list::-webkit-scrollbar-thumb{background:linear-gradient(90deg,var(--accent),#4fb0ff);border-radius:8px}
 
 /* Ground ripple layer */
 .ripples{position:fixed;left:0;right:0;bottom:0;height:28vh;z-index:-1;pointer-events:none}

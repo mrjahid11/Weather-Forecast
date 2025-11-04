@@ -98,6 +98,28 @@ npm run build
 # Then start backend as above and open http://localhost:4000
 ```
 
+Development helper (Windows)
+----------------------------
+
+If upstream services (Open‑Meteo/Nominatim) are unreliable or blocked in your environment, you can force mock data or start dev servers with the included helper script.
+
+Start with mock data (no external API calls):
+
+```powershell
+# runs backend with USE_MOCK=true and builds the frontend
+.\scripts\run-dev.ps1 -Mock
+```
+
+Start in dev mode (frontend hot-reload in a separate window):
+
+```powershell
+.# start backend and open a new PowerShell window for `npm run dev`
+.\scripts\run-dev.ps1 -Dev
+```
+
+The helper is a convenience for Windows developers; it installs dependencies, builds (or starts the dev server), and launches the backend. Use `-NoBuild` to skip the frontend build step when not needed.
+
+
 Docker (build + run):
 
 ```powershell

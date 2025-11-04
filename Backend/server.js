@@ -9,6 +9,43 @@ const cache = new NodeCache({ stdTTL: 60 * 10, checkperiod: 120 }); // 10 minute
 const app = express();
 app.use(express.json());
 
+// Generate a lightweight mock forecast (used when upstream is unavailable).
+function generateMockForecast(lat = 0, lon = 0) {
+  const now = Date.now()
+  const hours = 48
+  const hourly = { time: [], temperature_2m: [], precipitation: [], weathercode: [], windspeed_10m: [] }
+  for (let i = 0; i < hours; i++) {
+    const ts = new Date(now + i * 60 * 60 * 1000)
+    hourly.time.push(ts.toISOString())
+    // simple diurnal temp oscillation
+    const hour = ts.getHours()
+    const base = 14 + (Math.sin((hour / 24) * Math.PI * 2) * 6)
+    hourly.temperature_2m.push(Number((base + (Math.random() * 2 - 1)).toFixed(1)))
+    // small random precipitation occasionally
+    hourly.precipitation.push(Math.random() < 0.15 ? Number((Math.random() * 3).toFixed(1)) : 0)
+    // map to simple weather codes: 0 clear day/night, 3 cloudy, 51 light rain, 95 thunder
+    const wc = Math.random() < 0.05 ? 95 : (Math.random() < 0.1 ? 51 : (Math.random() < 0.2 ? 3 : 0))
+    hourly.weathercode.push(wc)
+    hourly.windspeed_10m.push(Math.round(5 + Math.random() * 15))
+  }
+
+  // daily for next 7 days
+  const daily = { time: [], temperature_2m_max: [], temperature_2m_min: [] }
+  for (let d = 0; d < 7; d++) {
+    const day = new Date(now + d * 24 * 60 * 60 * 1000)
+    daily.time.push(day.toISOString().slice(0, 10))
+    const highs = 18 + Math.round(Math.random() * 6)
+    const lows = 8 + Math.round(Math.random() * 6)
+    daily.temperature_2m_max.push(highs)
+    daily.temperature_2m_min.push(lows)
+  }
+
+  // current weather based on first hourly
+  const current = { time: hourly.time[0], temperature: hourly.temperature_2m[0], windspeed: hourly.windspeed_10m[0], is_day: (new Date(hourly.time[0]).getHours() >= 6 && new Date(hourly.time[0]).getHours() < 18) ? 1 : 0, weathercode: hourly.weathercode[0], interval: 900 }
+
+  return { latitude: parseFloat(lat) || 0, longitude: parseFloat(lon) || 0, current_weather: current, hourly, daily }
+}
+
 // Serve frontend static files from /public (built React app will be copied here)
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -42,6 +79,28 @@ async function fetchWithTimeout(url, opts = {}, timeout = 10000) {
   }
 }
 
+// Helper: fetch with retries and exponential backoff to handle transient upstream issues
+async function fetchWithRetries(url, opts = {}, timeout = 10000, retries = 2, backoffBase = 300) {
+  let attempt = 0
+  let lastErr = null
+  while (attempt <= retries) {
+    try {
+      const resp = await fetchWithTimeout(url, opts, timeout)
+      // If upstream returns 5xx treat as retryable
+      if (resp.ok || (resp.status < 500)) return resp
+      lastErr = new Error(`Upstream responded ${resp.status}`)
+    } catch (err) {
+      lastErr = err
+    }
+    attempt++
+    if (attempt > retries) break
+    // exponential backoff with jitter
+    const delay = Math.round(backoffBase * Math.pow(2, attempt - 1) * (0.75 + Math.random() * 0.5))
+    await new Promise((r) => setTimeout(r, delay))
+  }
+  throw lastErr || new Error('fetchWithRetries: unknown error')
+}
+
 // API: /api/forecast?city=CityName
 // Uses Nominatim (OpenStreetMap) to geocode the city name, then Open-Meteo for weather
 app.get('/api/forecast', async (req, res) => {
@@ -55,20 +114,55 @@ app.get('/api/forecast', async (req, res) => {
     return res.json({ ...cached, cached: true });
   }
 
+  // Optionally force a generated mock forecast (development convenience)
+  if (process.env.USE_MOCK === 'true') {
+    const mock = generateMockForecast(0, 0)
+    const payload = { location: city, lat: 0, lon: 0, forecast: mock }
+    // Do NOT cache forced mock responses so they update each refresh during development
+    return res.json({ ...payload, cached: false, mock: true })
+  }
+
   try {
     // Nominatim geocoding
-    const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
-    const nomResp = await fetchWithTimeout(nominatimUrl, { headers: { 'User-Agent': 'weather-app-example' } }, 8000);
-    if (!nomResp.ok) throw new Error(`Nominatim failed: ${nomResp.status}`);
-    const places = await nomResp.json();
+  const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1`;
+  // Nominatim is a public service with rate limits; use retries with a slightly longer timeout
+  const nomResp = await fetchWithRetries(nominatimUrl, { headers: { 'User-Agent': 'weather-app-example' } }, 10000, 2).catch((e) => { throw e });
+  if (!nomResp.ok) throw new Error(`Nominatim failed: ${nomResp.status}`);
+  const places = await nomResp.json();
     if (!places || places.length === 0) return res.status(404).json({ error: 'Location not found' });
     const { lat, lon, display_name } = places[0];
 
-    // Open-Meteo forecast
-    const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
-    const metResp = await fetchWithTimeout(meteoUrl, {}, 8000);
-    if (!metResp.ok) throw new Error(`Open-Meteo failed: ${metResp.status}`);
-    const metData = await metResp.json();
+  // Open-Meteo forecast: include hourly variables so frontend can render a 24-hour view
+  // Request hourly temperature, precipitation, weathercode and windspeed in addition to daily summaries
+  const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,precipitation,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
+    // Use retries and a slightly longer timeout for the forecast request to reduce transient 504s
+    let metData = null
+    try {
+      const metResp = await fetchWithRetries(meteoUrl, {}, 15000, 2)
+      if (!metResp.ok) throw new Error(`Open-Meteo failed: ${metResp.status}`)
+      metData = await metResp.json()
+    } catch (err) {
+      console.warn('Open-Meteo forecast failed, attempting lightweight fallback:', err && err.message)
+      // Fallback: try a lightweight request asking only for current weather (smaller, faster)
+      try {
+        const lightweightUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`;
+        const lwResp = await fetchWithRetries(lightweightUrl, {}, 8000, 1)
+        if (lwResp.ok) {
+          const lw = await lwResp.json()
+          // Create a minimal shape with current_weather so frontend can at least show current
+          metData = { latitude: lw.latitude, longitude: lw.longitude, current_weather: lw.current_weather }
+        } else {
+          throw new Error(`Lightweight Open-Meteo failed: ${lwResp.status}`)
+        }
+      } catch (err2) {
+        // If fallback also fails, generate a local mock forecast so the app remains usable
+        console.warn('Both full and lightweight Open-Meteo requests failed; returning generated mock forecast:', err2 && err2.message)
+        metData = generateMockForecast(lat, lon)
+        // Do not cache generated mock forecasts — keep them ephemeral so they change on refresh
+        const payload = { location: display_name || city, lat, lon, forecast: metData }
+        return res.json({ ...payload, cached: false, mock: true })
+      }
+    }
 
     const payload = { location: display_name, lat, lon, forecast: metData };
     // Store in cache

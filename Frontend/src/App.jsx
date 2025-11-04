@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import MarinePanel from './MarinePanel'
+import HourlyPanel from './HourlyPanel'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -28,6 +29,17 @@ function mapWeatherCodeToEmoji(code) {
   return 'ℹ️'
 }
 
+function mapWeatherCodeToLabel(code) {
+  if (code === 0) return 'Clear'
+  if (code === 1 || code === 2) return 'Partly cloudy'
+  if (code === 3) return 'Cloudy'
+  if (code >= 45 && code <= 48) return 'Foggy'
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'Rain'
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return 'Snow'
+  if (code >= 95 && code <= 99) return 'Thunderstorm'
+  return 'Unknown'
+}
+
 function cToF(v) {
   return Math.round((v * 9) / 5 + 32)
 }
@@ -50,6 +62,8 @@ export default function App() {
   const [motionPref, setMotionPref] = useState('auto') // auto | calm
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [climateOpen, setClimateOpen] = useState(false)
+
+  const isDevMode = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MODE !== 'production'
 
   // Moon phase approximation + waxing/waning. Returns { kind: 'full'|'half'|'other', age: number (0-29), waxing: boolean }
   function getMoonPhaseDetails(dateStr) {
@@ -404,6 +418,10 @@ export default function App() {
   return (
     <>
       {renderAmbient()}
+      {/* Dev-only debug panel: shows when backend returned mock data (non-intrusive) */}
+      {isDevMode && data && data.mock && (
+        <div className="dev-debug-panel" role="status" aria-live="polite">DEV: mock data active (generated)</div>
+      )}
       <div className="container">
       <div className="header-row">
         <h1>Weather Forecast</h1>
@@ -475,12 +493,20 @@ export default function App() {
           <h2>{data.location}</h2>
 
           {data.forecast && data.forecast.current_weather && (
-            <div className="current">
-              <strong>Current:</strong>{' '}
-              {unit === 'C' ? Math.round(data.forecast.current_weather.temperature) : cToF(data.forecast.current_weather.temperature)}°{unit}
-              {' '}— wind {data.forecast.current_weather.windspeed} km/h
-              {data.cached ? <em> (cached)</em> : null}
-              <span className="weather-icon"> {mapWeatherCodeToEmoji(data.forecast.current_weather.weathercode)}</span>
+            <div className="current-tile">
+              <div className="cw-left">
+                <div className="cw-icon" aria-hidden>{mapWeatherCodeToEmoji(data.forecast.current_weather.weathercode)}</div>
+                <div className="cw-label">{mapWeatherCodeToLabel(data.forecast.current_weather.weathercode)}</div>
+              </div>
+              <div className="cw-main">
+                <div className="cw-temp">{unit === 'C' ? Math.round(data.forecast.current_weather.temperature) : cToF(data.forecast.current_weather.temperature)}°{unit}</div>
+                <div className="cw-sub">Feels like {unit === 'C' ? Math.round(data.forecast.current_weather.temperature) : cToF(data.forecast.current_weather.temperature)}°{unit}</div>
+              </div>
+              <div className="cw-right">
+                <div>Wind: <strong>{data.forecast.current_weather.windspeed} km/h</strong></div>
+                <div>Time: <small>{new Date(data.forecast.current_weather.time).toLocaleString()}</small></div>
+                {data.cached ? <div className="cached-badge">cached</div> : null}
+              </div>
             </div>
           )}
 
@@ -503,9 +529,20 @@ export default function App() {
             )}
           </div>
 
+          {/* 24-hour hourly forecast (present -> +24h) inserted before the 7-day chart */}
+          {data && data.forecast && data.forecast.hourly && (
+            <HourlyPanel forecast={data.forecast} unit={unit} />
+          )}
+
           {chartData ? (
-            <div className="chart-wrapper">
-              <Line options={chartOptions} data={chartData} />
+            <div className="forecast-tile">
+              <div className="tile-header">
+                <h3>7-day forecast</h3>
+                <div className="tile-meta">Min / Max</div>
+              </div>
+              <div className="chart-wrapper">
+                <Line options={chartOptions} data={chartData} />
+              </div>
             </div>
           ) : (
             data.forecast && data.forecast.daily ? (
@@ -527,41 +564,46 @@ export default function App() {
             </div>
           )}
 
-            {/* Climate change summary (toggleable) */}
-            <div style={{ marginTop: 12 }}>
-              <button type="button" className="link-btn" onClick={() => setClimateOpen((v) => !v)}>{climateOpen ? 'Hide Climate' : 'Show Climate summary'}</button>
-            </div>
-
-            {climateOpen && (
-              <div className="climate-block" style={{ marginTop: 8 }}>
-                {climateLoading && <div className="climate-loading">Loading climate trend...</div>}
-                {climateError && <div className="climate-error">Climate Error: {climateError}</div>}
-                {climate && climate.trend && (
-                  <div className="climate">
-                    <h3>Climate summary (past {climate.years} years)</h3>
-                    <div>Local trend: {climate.trend.per_decade >= 0 ? '+' : ''}{climate.trend.per_decade.toFixed(3)} °C/decade</div>
-                    {climate.baseline && climate.baseline.mean != null && climate.recent && climate.recent.mean != null && (
-                      <div>Recent anomaly (vs {climate.baseline.period}): {climate.recent.anomaly >= 0 ? '+' : ''}{climate.recent.anomaly.toFixed(2)} °C (last {climate.recent.years} yrs)</div>
-                    )}
-                    <details>
-                      <summary>Annual means (click to expand)</summary>
-                      <div className="climate-annual">
-                        {climate.annual && climate.annual.map((r) => (
-                          <div key={r.year}>{r.year}: {r.mean.toFixed(2)} °C</div>
-                        ))}
-                      </div>
-                    </details>
-
-                    {/* Small line chart for annual means */}
-                    <div className="climate-chart" style={{ height: 180, marginTop: 12 }}>
-                      {climateChart ? (
-                        <Line data={climateChart} options={climateChartOptions} />
-                      ) : null}
-                    </div>
-                  </div>
-                )}
+            {/* Climate change summary (tiled, toggleable) */}
+            <div className="climate-tile" style={{ marginTop: 12 }}>
+              <div className="tile-header">
+                <h3>Climate summary</h3>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div className="tile-meta">Past {climate?.years ?? 30} yrs</div>
+                  <button type="button" className="link-btn" onClick={() => setClimateOpen((v) => !v)}>{climateOpen ? 'Hide' : 'Show'}</button>
+                </div>
               </div>
-            )}
+
+              {climateOpen && (
+                <div className="climate-block" style={{ marginTop: 8 }}>
+                  {climateLoading && <div className="climate-loading">Loading climate trend...</div>}
+                  {climateError && <div className="climate-error">Climate Error: {climateError}</div>}
+                  {climate && climate.trend && (
+                    <div className="climate">
+                      <div>Local trend: {climate.trend.per_decade >= 0 ? '+' : ''}{climate.trend.per_decade.toFixed(3)} °C/decade</div>
+                      {climate.baseline && climate.baseline.mean != null && climate.recent && climate.recent.mean != null && (
+                        <div>Recent anomaly (vs {climate.baseline.period}): {climate.recent.anomaly >= 0 ? '+' : ''}{climate.recent.anomaly.toFixed(2)} °C (last {climate.recent.years} yrs)</div>
+                      )}
+                      <details style={{ marginTop: 8 }}>
+                        <summary>Annual means (click to expand)</summary>
+                        <div className="climate-annual">
+                          {climate.annual && climate.annual.map((r) => (
+                            <div key={r.year}>{r.year}: {r.mean.toFixed(2)} °C</div>
+                          ))}
+                        </div>
+                      </details>
+
+                      {/* Small line chart for annual means */}
+                      <div className="climate-chart" style={{ height: 180, marginTop: 12 }}>
+                        {climateChart ? (
+                          <Line data={climateChart} options={climateChartOptions} />
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
         </div>
       )}
       </div>
