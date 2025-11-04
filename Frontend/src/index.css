@@ -296,7 +296,13 @@ animation:flash 8s ease-in-out infinite}
 
 /* Marine panel styles */
 .marine-block{margin-top:16px;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid var(--border)}
-.marine-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.marine-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.marine-header h3{font-size:15px;margin:0}
+.marine-header .link-btn{margin:0}
+
+.marine-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.marine-controls-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.marine-controls-right{display:flex;align-items:center;gap:8px}
 .marine-controls input[type="number"]{width:84px;padding:6px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--fg)}
 .marine-chart-wrapper{margin-top:12px}
 .marine-note{font-size:12px;margin-top:8px;color:var(--fg)}

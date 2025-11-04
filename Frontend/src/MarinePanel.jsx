@@ -81,13 +81,25 @@ export default function MarinePanel({ lat, lon }) {
 
   return (
     <div className="marine-block">
+      {/* Header: title on left, toggle on right (like climate summary) */}
+      <div className="marine-header">
+        <h3 style={{ margin: 0 }}>Marine</h3>
+        <div className="marine-header-actions">
+          <button type="button" className="link-btn" onClick={() => setMarineOpen(v => !v)}>{marineOpen ? 'Hide Marine' : 'Show Marine'}</button>
+        </div>
+      </div>
+
+      {/* Controls: place forecast/past inputs to the left side of the tile, with Load button after them */}
       <div className="marine-controls">
-        <button type="button" className="link-btn" onClick={() => setMarineOpen(v => !v)}>{marineOpen ? 'Hide Marine' : 'Show Marine forecast'}</button>
-        <label>Forecast 15-min steps:</label>
-        <input type="number" min="0" value={forecastMin15} onChange={(e) => setForecastMin15(Math.max(0, parseInt(e.target.value || '0', 10)))} />
-        <label>Past 15-min steps:</label>
-        <input type="number" min="0" value={pastMin15} onChange={(e) => setPastMin15(Math.max(0, parseInt(e.target.value || '0', 10)))} />
-        <button type="button" className="icon-btn" onClick={fetchMarine} disabled={marineLoading}>{marineLoading ? 'Loading...' : 'Load Marine'}</button>
+        <div className="marine-controls-left">
+          <label>Forecast 15-min steps:</label>
+          <input type="number" min="0" value={forecastMin15} onChange={(e) => setForecastMin15(Math.max(0, parseInt(e.target.value || '0', 10)))} />
+          <label>Past 15-min steps:</label>
+          <input type="number" min="0" value={pastMin15} onChange={(e) => setPastMin15(Math.max(0, parseInt(e.target.value || '0', 10)))} />
+        </div>
+        <div className="marine-controls-right">
+          <button type="button" className="icon-btn" onClick={fetchMarine} disabled={marineLoading}>{marineLoading ? 'Loading...' : 'Load Marine'}</button>
+        </div>
       </div>
 
       {marineError && <div className="marine-error">Marine Error: {marineError}</div>}
