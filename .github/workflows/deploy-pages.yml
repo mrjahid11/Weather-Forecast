@@ -1,13 +1,8 @@
-name: Build Frontend and deploy to GitHub Pages
+name: Build Frontend and publish to `gh-pages` branch
 
 on:
   push:
     branches: [ main ]
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build-and-deploy:
@@ -35,13 +30,11 @@ jobs:
           cd Frontend
           npm run build
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v3
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v1
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: Backend/public
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v1
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./Backend/public
+          publish_branch: gh-pages
+          # Keep history minimal
+          force_orphan: true
