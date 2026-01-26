@@ -36,3 +36,21 @@ coverage/
 # Editor
 .vscode/
 .idea/
+
+# Local env variants
+.env.local
+.env.*.local
+
+# Cache directories
+/.cache/
+.cache/
+.parcel-cache/
+.next/
+
+# Package artifacts
+*.tgz
+
+# PID files
+*.pid
+*.pid.lock
+
